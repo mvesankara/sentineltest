@@ -1,0 +1,94 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id        String @id @default(cuid())
+  name      String @unique
+  apiKey    String @unique @default(uuid()) // Auto-generated API key for the company
+  users     User[]
+  logs      Log[]
+  alerts    Alert[]
+  auditTrails AuditTrail[] // Added relation
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String   // Will store hashed password
+  role        String   @default("USER") // e.g., USER, ADMIN, COMPANY_ADMIN
+  companyId   String   @map("company_id")
+  company     Company  @relation(fields: [companyId], references: [id])
+  settings    Json?    // For user-specific settings
+  auditTrails AuditTrail[] // Added relation
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([companyId])
+}
+
+model Log {
+  id          String   @id @default(cuid())
+  timestamp   DateTime @default(now())
+  source      String
+  eventType   String   @map("event_type")
+  content     String
+  hash        String?
+  severity    String?  // e.g., LOW, MEDIUM, HIGH, CRITICAL (from AI)
+
+  companyId   String?  @map("company_id") // Optional for now, but should be required for tenant data
+  company     Company? @relation(fields: [companyId], references: [id])
+
+  alerts      Alert[]
+  createdAt   DateTime @default(now()) // Added for consistency
+  updatedAt   DateTime @updatedAt    // Added for consistency
+
+  @@index([companyId])
+}
+
+model Alert {
+  id              String   @id @default(cuid())
+  logId           String   @map("log_id")
+  log             Log      @relation(fields: [logId], references: [id])
+  aiConfidence    Float?   @map("ai_confidence")
+  blockchainHash  String?  @map("blockchain_hash")
+  status          String   @default("NEW")
+  severity        String   // From AI/rules, e.g., "HIGH"
+  
+  companyId       String?  @map("company_id") // Optional for now
+  company         Company? @relation(fields: [companyId], references: [id])
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt    // Added for consistency
+
+  @@index([logId])
+  @@index([companyId])
+}
+
+model AuditTrail {
+  id        String   @id @default(cuid())
+  action    String   // e.g., "USER_LOGIN", "ALERT_CREATED", "LOG_INGESTED", "ALERT_STATUS_UPDATED"
+  userId    String?  @map("user_id") // User who performed the action
+  user      User?    @relation(fields: [userId], references: [id])
+  companyId String?  @map("company_id") // Company context for the action
+  company   Company? @relation(fields: [companyId], references: [id])
+  details   Json?    // Optional: more details about the action, e.g., { alertId: "...", newStatus: "..." }
+  timestamp DateTime @default(now())
+
+  @@index([userId])
+  @@index([companyId])
+  @@index([action])
+}
