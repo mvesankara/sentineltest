@@ -1,23 +1,26 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../server';
 import { analyzeLogAndCreateAlert } from '../services/aiDetectionService';
-import { protect, AuthenticatedRequest } from '../middleware/authMiddleware'; // Added import
+import { protect, AuthenticatedRequest } from '../middleware/authMiddleware';
+import { recordAuditEvent, AUDIT_ACTIONS } from '../services/auditService'; // Moved import to top
 
 const router = Router();
 
 // POST /api/logs - Log Ingestion Endpoint
 // Now protected and company-scoped
-router.post('/', protect, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.post('/', protect, async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
   const { timestamp, source, eventType, content, hash, severity } = req.body;
   const companyId = req.user?.companyId; // Get companyId from authenticated user
 
   if (!companyId) {
-    return res.status(403).json({ error: 'User company information is missing.' });
+    res.status(403).json({ error: 'User company information is missing.' });
+    return;
   }
 
   // Basic validation
   if (!timestamp || !source || !eventType || !content) {
-    return res.status(400).json({ error: 'Missing required fields: timestamp, source, eventType, content' });
+    res.status(400).json({ error: 'Missing required fields: timestamp, source, eventType, content' });
+    return;
   }
 
   try {
@@ -32,8 +35,6 @@ router.post('/', protect, async (req: AuthenticatedRequest, res: Response, next:
         companyId: companyId, // Associate log with company
       },
     });
-
-import { recordAuditEvent, AUDIT_ACTIONS } from '../services/auditService'; // Added import
 
     if (newLog) {
       // Record audit event for log ingestion
