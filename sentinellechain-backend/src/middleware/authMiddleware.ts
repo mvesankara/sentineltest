@@ -17,7 +17,8 @@ export function protect(req: AuthenticatedRequest, res: Response, next: NextFunc
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized: No token provided or malformed token.' });
+    res.status(401).json({ error: 'Unauthorized: No token provided or malformed token.' });
+    return;
   }
 
   const token = authHeader.split(' ')[1];
@@ -36,12 +37,15 @@ export function protect(req: AuthenticatedRequest, res: Response, next: NextFunc
   } catch (error) {
     console.error('Token verification error:', error);
     if (error instanceof jwt.TokenExpiredError) {
-        return res.status(401).json({ error: 'Unauthorized: Token expired.' });
+        res.status(401).json({ error: 'Unauthorized: Token expired.' });
+        return;
     }
     if (error instanceof jwt.JsonWebTokenError) {
-        return res.status(401).json({ error: 'Unauthorized: Invalid token.' });
+        res.status(401).json({ error: 'Unauthorized: Invalid token.' });
+        return;
     }
-    return res.status(401).json({ error: 'Unauthorized: Could not verify token.' });
+    res.status(401).json({ error: 'Unauthorized: Could not verify token.' });
+    return;
   }
 }
 
@@ -49,7 +53,8 @@ export function protect(req: AuthenticatedRequest, res: Response, next: NextFunc
 export function authorize(roles: string[]) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Forbidden: You do not have the necessary permissions.' });
+      res.status(403).json({ error: 'Forbidden: You do not have the necessary permissions.' });
+      return;
     }
     next();
   };

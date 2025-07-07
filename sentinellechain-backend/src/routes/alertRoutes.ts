@@ -6,11 +6,12 @@ const router = Router();
 
 // GET /api/alerts - Fetch Alerts Endpoint
 // Now protected and company-scoped
-router.get('/', protect, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.get('/', protect, async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
   const companyId = req.user?.companyId;
 
   if (!companyId) {
-    return res.status(403).json({ error: 'User company information is missing.' });
+    res.status(403).json({ error: 'User company information is missing.' });
+    return;
   }
 
   try {
@@ -30,6 +31,7 @@ router.get('/', protect, async (req: AuthenticatedRequest, res: Response, next: 
       }
     });
     res.status(200).json(alerts);
+    return; // Explicitly return void
   } catch (error) {
     next(error);
   }

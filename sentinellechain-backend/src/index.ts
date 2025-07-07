@@ -1,6 +1,7 @@
 import http from 'http';
 import { app } from './server';
 import { initSocketIO } from './services/ioService';
+import { Request, Response } from 'express';
 
 const PORT = process.env.PORT || 3001;
 

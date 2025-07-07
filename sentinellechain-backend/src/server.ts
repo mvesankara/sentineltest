@@ -19,30 +19,34 @@ app.use('/api/alerts', alertRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/reports', reportRoutes); // Added report routes
 
-// Basic Error Handling
+// Health check endpoint
+app.get('/health', (req: Request, res: Response) => {
+  res.status(200).json({ status: 'UP' });
+});
+
+// Interface for custom errors with a status property
 interface HttpError extends Error {
   status?: number;
 }
 
-app.use((err: HttpError, req: Request, res: Response, next: NextFunction) => {
-  console.error(err.stack);
-  const status = err.status || 500;
-  const message = err.message || 'Something went wrong!';
-  res.status(status).json({ error: message });
-});
-
 // Global error handler for Prisma
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-  if (err.name === 'PrismaClientKnownRequestError') {
-    // Handle Prisma known errors (e.g., unique constraint violations)
+// IMPORTANT: Error handling middleware must be defined AFTER all other app.use() and routes calls
+app.use((err: any, req: any, res: any, next: any) => {
+  if (err && err.name === 'PrismaClientKnownRequestError') {
     return res.status(400).json({ error: 'Database error: ' + err.message });
-  } else if (err.name === 'PrismaClientValidationError') {
-    // Handle Prisma validation errors
+  } else if (err && err.name === 'PrismaClientValidationError') {
     return res.status(400).json({ error: 'Invalid data: ' + err.message });
   }
-  // For other errors, pass to the default error handler
   next(err);
 });
 
+// Basic Error Handling
+// IMPORTANT: Error handling middleware must be defined AFTER all other app.use() and routes calls
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error(err.stack);
+  const status = err && err.status ? err.status : 500;
+  const message = err.message || 'Something went wrong!';
+  res.status(status).json({ error: message });
+});
 
 export { app, prisma };

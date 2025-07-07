@@ -1,5 +1,11 @@
 import { Log as LogPrismaType, Alert as AlertPrismaType, PrismaClient } from '@prisma/client';
 import { prisma } from '../server'; // Import shared Prisma client instance
+import Web3 from 'web3';
+import { getIO } from './ioService';
+import { anchorDataOnBlockchain } from './blockchainService';
+import { recordAuditEvent, AUDIT_ACTIONS } from './auditService';
+
+const web3Instance = new Web3();
 
 // Define the structure for a rule
 interface AnomalyRule {
@@ -44,39 +50,14 @@ const rules: AnomalyRule[] = [
 /**
  * Analyzes a log entry for anomalies based on predefined rules and creates an alert if an anomaly is detected.
  * @param logData The log data to analyze.
+ * @param companyId The ID of the company the log belongs to.
  * @returns A Promise that resolves to the created Alert object or null if no anomaly is detected.
  */
-import { Log as LogPrismaType, Alert as AlertPrismaType } from '@prisma/client'; // Keep existing imports
-import Web3 from 'web3'; // Moved to top
-import { getIO } from './ioService';
-import { anchorDataOnBlockchain } from './blockchainService';
-import { prisma } from '../server';
-
-const web3Instance = new Web3(); // Use a specific instance name to avoid conflict if web3 is imported elsewhere for other purposes
-
-// Define the structure for a rule (assuming it's defined above or in a shared types file)
-interface AnomalyRule {
-  pattern: RegExp;
-  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-  confidence: number;
-  source?: string;
-  eventType?: string;
-}
-
-import { recordAuditEvent, AUDIT_ACTIONS } from './auditService'; // Added import
-
-// Define the rules for anomaly detection (assuming it's defined above)
-const rules: AnomalyRule[] = [
-  { pattern: /failed login attempts/i, severity: "HIGH", confidence: 0.75, },
-  { pattern: /port scan detected/i, severity: "CRITICAL", confidence: 0.90, },
-  { pattern: /denied/i, eventType: "firewall_alert", severity: "MEDIUM", confidence: 0.60, },
-  { pattern: /SQL injection attempt/i, severity: "CRITICAL", confidence: 0.95, },
-  { pattern: /malware detected/i, severity: "CRITICAL", confidence: 0.98, },
-];
-
-
 // Updated to accept companyId
 export async function analyzeLogAndCreateAlert(logData: LogPrismaType, companyId: string): Promise<AlertPrismaType | null> {
+  // 'rules' should be defined once at the top of the file.
+  // Ensure Web3, getIO, anchorDataOnBlockchain, recordAuditEvent, AUDIT_ACTIONS are imported at the top.
+  // Ensure web3Instance is defined once at the top.
   for (const rule of rules) {
     if (rule.source && rule.source.toLowerCase() !== logData.source.toLowerCase()) {
       continue;

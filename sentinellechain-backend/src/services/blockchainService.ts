@@ -101,7 +101,7 @@ const contractABI: any = [ /* Paste ABI JSON here */
 ];
 
 let web3: Web3;
-let logProofContract: Contract;
+let logProofContract: Contract<any>; // Specify 'any' for the ABI type argument
 
 try {
   web3 = new Web3(RPC_URL);
@@ -162,7 +162,7 @@ export async function anchorDataOnBlockchain(dataToHash: string): Promise<string
     // Send transaction
     const receipt = await logProofContract.methods.storeHash(hash).send({
       from: fromAddress,
-      gas: estimatedGas,
+      gas: estimatedGas.toString(), // Convert bigint to string
       // gasPrice: await web3.eth.getGasPrice() // Optional: set gasPrice or let web3 handle it
     });
 
