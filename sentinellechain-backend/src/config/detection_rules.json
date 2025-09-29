@@ -1,0 +1,38 @@
+[
+  {
+    "name": "Failed Login Attempts",
+    "pattern": "failed login attempts",
+    "flags": "i",
+    "severity": "HIGH",
+    "confidence": 0.75
+  },
+  {
+    "name": "Port Scan Detected",
+    "pattern": "port scan detected",
+    "flags": "i",
+    "severity": "CRITICAL",
+    "confidence": 0.90
+  },
+  {
+    "name": "Firewall Denial",
+    "pattern": "denied",
+    "flags": "i",
+    "eventType": "firewall_alert",
+    "severity": "MEDIUM",
+    "confidence": 0.60
+  },
+  {
+    "name": "SQL Injection Attempt",
+    "pattern": "SQL injection attempt",
+    "flags": "i",
+    "severity": "CRITICAL",
+    "confidence": 0.95
+  },
+  {
+    "name": "Malware Detected",
+    "pattern": "malware detected",
+    "flags": "i",
+    "severity": "CRITICAL",
+    "confidence": 0.98
+  }
+]

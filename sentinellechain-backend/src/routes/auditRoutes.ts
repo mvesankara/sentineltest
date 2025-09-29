@@ -9,10 +9,11 @@ router.get(
   '/',
   protect,
   // authorize(['ADMIN', 'COMPANY_ADMIN']), // Future: Restrict to specific roles
-  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     const companyId = req.user?.companyId;
     if (!companyId) {
-      return res.status(403).json({ error: 'User company information is missing.' });
+      res.status(403).json({ error: 'User company information is missing.' });
+      return;
     }
 
     const page = parseInt(req.query.page as string) || 1;

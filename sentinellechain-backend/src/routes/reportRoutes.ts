@@ -9,10 +9,11 @@ const router = Router();
 router.get(
   '/alerts/json',
   protect,
-  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     const companyId = req.user?.companyId;
     if (!companyId) {
-      return res.status(403).json({ error: 'User company information is missing.' });
+      res.status(403).json({ error: 'User company information is missing.' });
+      return;
     }
 
     const { status, severity, startDate, endDate } = req.query;
@@ -35,9 +36,10 @@ router.get(
     if (startDate && typeof startDate === 'string') {
       const date = new Date(startDate);
       if (!isNaN(date.valueOf())) { // Check if date is valid
-        whereClause.createdAt = { ...whereClause.createdAt as Prisma.DateTimeFilter, gte: date };
+        whereClause.createdAt = { ...(whereClause.createdAt as Prisma.DateTimeFilter), gte: date };
       } else {
-        return res.status(400).json({ error: 'Invalid startDate format. Use YYYY-MM-DD.' });
+        res.status(400).json({ error: 'Invalid startDate format. Use YYYY-MM-DD.' });
+        return;
       }
     }
 
@@ -46,16 +48,25 @@ router.get(
       if (!isNaN(date.valueOf())) { // Check if date is valid
          // To include the whole end day, set to end of day
         date.setHours(23, 59, 59, 999);
-        whereClause.createdAt = { ...whereClause.createdAt as Prisma.DateTimeFilter, lte: date };
+        whereClause.createdAt = { ...(whereClause.createdAt as Prisma.DateTimeFilter), lte: date };
       } else {
-        return res.status(400).json({ error: 'Invalid endDate format. Use YYYY-MM-DD.' });
+        res.status(400).json({ error: 'Invalid endDate format. Use YYYY-MM-DD.' });
+        return;
       }
     }
     
     // Validate that if both dates are present, startDate is not after endDate
-    if (whereClause.createdAt?.gte && whereClause.createdAt?.lte) {
-        if (new Date(whereClause.createdAt.gte as string) > new Date(whereClause.createdAt.lte as string)) {
-            return res.status(400).json({ error: 'startDate cannot be after endDate.' });
+    if (
+      whereClause.createdAt &&
+      typeof whereClause.createdAt === 'object' &&
+      'gte' in whereClause.createdAt &&
+      'lte' in whereClause.createdAt &&
+      whereClause.createdAt.gte &&
+      whereClause.createdAt.lte
+    ) {
+        if (new Date(whereClause.createdAt.gte as Date) > new Date(whereClause.createdAt.lte as Date)) {
+            res.status(400).json({ error: 'startDate cannot be after endDate.' });
+            return;
         }
     }
 

@@ -4,11 +4,12 @@ import * as authService from '../services/authService';
 const router = Router();
 
 // POST /api/auth/register
-router.post('/register', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/register', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { email, password, companyName } = req.body;
 
   if (!email || !password || !companyName) {
-    return res.status(400).json({ error: 'Email, password, and company name are required.' });
+    res.status(400).json({ error: 'Email, password, and company name are required.' });
+    return;
   }
 
   try {
@@ -16,18 +17,20 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
     res.status(201).json({ message: 'User registered successfully', user });
   } catch (error: any) {
     if (error.message === 'User with this email already exists.') {
-      return res.status(409).json({ error: error.message }); // Conflict
+      res.status(409).json({ error: error.message }); // Conflict
+      return;
     }
     next(error); // Pass to global error handler
   }
 });
 
 // POST /api/auth/login
-router.post('/login', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/login', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required.' });
+    res.status(400).json({ error: 'Email and password are required.' });
+    return;
   }
 
   try {
@@ -35,7 +38,8 @@ router.post('/login', async (req: Request, res: Response, next: NextFunction) =>
     res.status(200).json({ token, user });
   } catch (error: any) {
     if (error.message === 'Invalid email or password.') {
-      return res.status(401).json({ error: error.message }); // Unauthorized
+      res.status(401).json({ error: error.message }); // Unauthorized
+      return;
     }
     next(error);
   }
