@@ -5,6 +5,7 @@ import alertRoutes from './routes/alertRoutes';
 import authRoutes from './routes/authRoutes';
 import auditRoutes from './routes/auditRoutes';
 import reportRoutes from './routes/reportRoutes'; // Added import
+import dashboardRoutes from './routes/dashboardRoutes';
 
 const app: Application = express();
 const prisma = new PrismaClient();
@@ -18,6 +19,7 @@ app.use('/api/logs', logRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/reports', reportRoutes); // Added report routes
+app.use('/api/dashboard', dashboardRoutes);
 
 // Basic Error Handling
 interface HttpError extends Error {

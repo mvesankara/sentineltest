@@ -4,135 +4,93 @@ import Web3 from 'web3';
 import { getIO } from './ioService';
 import { anchorDataOnBlockchain } from './blockchainService';
 import { recordAuditEvent, AUDIT_ACTIONS } from './auditService';
-import * as fs from 'fs';
-import * as path from 'path';
+import { DetectionStrategy } from './detection/DetectionStrategy';
+import { RuleBasedStrategy } from './detection/RuleBasedStrategy';
 
-// Define the structure for a rule from the JSON file
-interface RuleConfig {
-  name: string;
-  pattern: string;
-  flags?: string;
-  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-  confidence: number;
-  source?: string;
-  eventType?: string;
-}
-
-// Define the structure for an operational anomaly rule
-interface AnomalyRule {
-  pattern: RegExp;
-  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-  confidence: number;
-  source?: string;
-  eventType?: string;
-}
-
-// Load rules from the external JSON file
-function loadRules(): AnomalyRule[] {
-  try {
-    const rulesPath = path.join(__dirname, '..', 'config', 'detection_rules.json');
-    const rulesConfig: RuleConfig[] = JSON.parse(fs.readFileSync(rulesPath, 'utf-8'));
-
-    return rulesConfig.map(rule => ({
-      ...rule,
-      pattern: new RegExp(rule.pattern, rule.flags || undefined),
-    }));
-  } catch (error) {
-    console.error("Failed to load or parse detection rules file. Using empty rule set.", error);
-    return []; // Return an empty array on error to prevent crash
-  }
-}
-
-const rules: AnomalyRule[] = loadRules();
-console.log(`Loaded ${rules.length} detection rules.`);
+// Initialise les stratégies de détection.
+// À l'avenir, on pourrait charger dynamiquement des stratégies (ML, etc.)
+const detectionStrategies: DetectionStrategy[] = [
+  new RuleBasedStrategy(),
+  // new MachineLearningStrategy(), // Exemple futur
+];
 
 const web3Instance = new Web3();
 
 /**
- * Analyzes a log entry for anomalies based on predefined rules and creates an alert if an anomaly is detected.
- * @param logData The log data to analyze.
- * @param companyId The ID of the company this log belongs to.
- * @returns A Promise that resolves to the created Alert object or null if no anomaly is detected.
+ * Analyse un log en utilisant une liste de stratégies de détection et crée une alerte si une anomalie est trouvée.
+ * @param logData Le log à analyser.
+ * @param companyId L'ID de l'entreprise propriétaire du log.
+ * @returns Une promesse qui se résout avec l'alerte créée (ou null).
  */
 export async function analyzeLogAndCreateAlert(logData: LogPrismaType, companyId: string): Promise<(AlertPrismaType & { log: LogPrismaType }) | null> {
-  for (const rule of rules) {
-    if (rule.source && rule.source.toLowerCase() !== logData.source.toLowerCase()) {
-      continue;
-    }
-    if (rule.eventType && rule.eventType.toLowerCase() !== logData.eventType.toLowerCase()) {
-      continue;
-    }
+  for (const strategy of detectionStrategies) {
+    const result = await strategy.analyze(logData);
 
-    if (rule.pattern.test(logData.content)) {
-      let createdAlertFull: (AlertPrismaType & { log: LogPrismaType }) | null = null;
+    if (result) {
+      // Une anomalie a été détectée, on crée l'alerte et on arrête l'analyse.
       try {
         const createdAlert = await prisma.alert.create({
           data: {
             logId: logData.id,
-            severity: rule.severity,
-            aiConfidence: rule.confidence,
+            severity: result.severity,
+            aiConfidence: result.confidence,
             status: "NEW",
-            companyId: companyId, 
+            companyId: companyId,
           },
-          include: { log: true }, // Ensure log is included for the return type
+          include: { log: true },
         });
 
-        createdAlertFull = createdAlert; // Assign to the correctly typed variable
+        console.log(`Alerte ${createdAlert.id} créée pour le log ${logData.id} via la stratégie ${strategy.constructor.name}.`);
 
-        console.log(`Alert created for log ${logData.id} (Company: ${companyId}) based on rule: ${rule.pattern}, severity: ${rule.severity}`);
-
-        // Record audit event for alert creation
+        // Enregistrement de l'audit pour la création de l'alerte
         await recordAuditEvent({
           action: AUDIT_ACTIONS.ALERT_CREATED,
           companyId: companyId,
-          details: { 
-            alertId: createdAlertFull.id,
-            severity: createdAlertFull.severity,
-            logId: createdAlertFull.logId,
-            rulePattern: rule.pattern.toString(),
+          details: {
+            alertId: createdAlert.id,
+            severity: createdAlert.severity,
+            logId: createdAlert.logId,
+            detectionSource: strategy.constructor.name,
+            ruleName: result.ruleName, // Ajout du nom de la règle/modèle
           },
         });
 
-        if (createdAlertFull && createdAlertFull.log) { // Ensure log is present for hashing
-          const dataToAnchor = JSON.stringify({
-            alertId: createdAlertFull.id,
-            logId: createdAlertFull.logId,
-            companyId: createdAlertFull.companyId,
-            timestamp: createdAlertFull.createdAt,
-            logContentHash: web3Instance.utils.sha3(createdAlertFull.log.content)
-          });
-          
-          console.log(`Attempting to anchor data for alert ${createdAlertFull.id}: ${dataToAnchor.substring(0,100)}...`);
-          const txHash = await anchorDataOnBlockchain(dataToAnchor);
-
-          if (txHash) {
-            console.log(`Data for alert ${createdAlertFull.id} anchored. Tx Hash: ${txHash}`);
-            // Update the alert with the blockchain hash
-            const updatedAlertWithHash = await prisma.alert.update({
-              where: { id: createdAlertFull.id },
-              data: { blockchainHash: txHash },
-              include: { log: true }, // Keep log included
-            });
-            createdAlertFull = updatedAlertWithHash; // Update our variable
-          } else {
-            console.warn(`Failed to anchor data for alert ${createdAlertFull.id} on blockchain.`);
-          }
-        }
+        // Ancrage sur la blockchain (si applicable)
+        const dataToAnchor = JSON.stringify({
+          alertId: createdAlert.id,
+          logId: createdAlert.logId,
+          companyId: createdAlert.companyId,
+          timestamp: createdAlert.createdAt,
+          logContentHash: web3Instance.utils.sha3(createdAlert.log.content),
+        });
         
-        if (createdAlertFull) {
-          const io = getIO();
-          io.emit('new_alert', createdAlertFull);
-          console.log('Emitted new_alert event via Socket.IO with alert:', createdAlertFull.id);
+        const txHash = await anchorDataOnBlockchain(dataToAnchor);
+        let alertWithHash = createdAlert;
+
+        if (txHash) {
+          alertWithHash = await prisma.alert.update({
+            where: { id: createdAlert.id },
+            data: { blockchainHash: txHash },
+            include: { log: true },
+          });
+          console.log(`Données de l'alerte ${createdAlert.id} ancrées. Hash Tx: ${txHash}`);
+        } else {
+          console.warn(`Échec de l'ancrage des données pour l'alerte ${createdAlert.id}.`);
         }
-        return createdAlertFull;
+
+        // Émission de l'événement en temps réel
+        const io = getIO();
+        io.emit('new_alert', alertWithHash);
+        console.log(`Événement 'new_alert' émis via Socket.IO pour l'alerte ${alertWithHash.id}.`);
+
+        return alertWithHash;
       } catch (error) {
-        console.error("Error during alert creation or blockchain anchoring:", error);
-        // If an error occurred after alert creation but during anchoring/emitting,
-        // createdAlertFull might still hold the initial alert.
-        // Depending on desired behavior, you might want to return it or null.
-        return createdAlertFull; // Or null if partial success is not acceptable
+        console.error("Erreur lors de la création de l'alerte ou de l'ancrage blockchain:", error);
+        return null; // Retourne null en cas d'échec pour éviter de bloquer le flux
       }
     }
   }
+
+  // Aucune stratégie n'a détecté d'anomalie
   return null;
 }
