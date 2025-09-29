@@ -1,6 +1,8 @@
 import Web3 from 'web3';
 import { Contract } from 'web3-eth-contract'; // For Contract type
 import { Log, Alert } from '@prisma/client'; // Assuming Alert type includes nested Log
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Configuration - Placeholders, should be in .env
 const RPC_URL = process.env.MUMBAI_RPC_URL || 'https://rpc-mumbai.maticvigil.com/'; // Public RPC for Mumbai
@@ -8,118 +10,56 @@ const CONTRACT_ADDRESS = process.env.LOG_PROOF_CONTRACT_ADDRESS || '0xYourDeploy
 const PRIVATE_KEY = process.env.SIGNER_PRIVATE_KEY || '0x0000000000000000000000000000000000000000000000000000000000000000'; // Placeholder
 const ACCOUNT_ADDRESS = process.env.SIGNER_ACCOUNT_ADDRESS || '0xYourAccountAddress'; // Placeholder
 
-// ABI from compiled LogProof.sol
-const contractABI: any = [ /* Paste ABI JSON here */ 
-    {
-		"inputs": [],
-		"stateMutability": "nonpayable",
-		"type": "constructor"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "bytes32",
-				"name": "logHash",
-				"type": "bytes32"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "timestamp",
-				"type": "uint256"
-			}
-		],
-		"name": "LogHashStored",
-		"type": "event"
-	},
-	{
-		"inputs": [],
-		"name": "owner",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "bytes32",
-				"name": "",
-				"type": "bytes32"
-			}
-		],
-		"name": "proofExists",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "bytes32",
-				"name": "logHash",
-				"type": "bytes32"
-			}
-		],
-		"name": "storeHash",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "bytes32",
-				"name": "logHash",
-				"type": "bytes32"
-			}
-		],
-		"name": "verifyHash",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	}
-];
+// Load ABI from the external JSON file
+function loadContractABI(): any[] {
+  try {
+    const abiPath = path.join(__dirname, '..', 'config', 'LogProof.json');
+    const abi = JSON.parse(fs.readFileSync(abiPath, 'utf-8'));
+    return abi;
+  } catch (error) {
+    console.error("Failed to load or parse contract ABI file. Returning empty array.", error);
+    return []; // Return an empty array on error to prevent crash
+  }
+}
+
+const contractABI: any[] = loadContractABI();
 
 let web3: Web3;
-let logProofContract: Contract;
+let logProofContract: Contract<any>;
 
-try {
-  web3 = new Web3(RPC_URL);
-  // Add account to wallet for signing transactions
+// Placeholder for a secure signer function.
+// In a production environment, this should be replaced with a call to a Key Management Service (KMS)
+// or another secure signing solution that does not expose the private key to the application.
+function getSecureSigner(web3Instance: Web3) {
+  // SECURITY WARNING: Storing private keys in environment variables is insecure and not recommended for production.
+  // This is for development purposes only.
+  console.warn("SECURITY WARNING: Private key is being loaded from an environment variable. This is not secure for production use. Replace with a KMS or other secure signing solution.");
+
   if (PRIVATE_KEY && PRIVATE_KEY !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
-    const account = web3.eth.accounts.privateKeyToAccount(PRIVATE_KEY);
-    web3.eth.accounts.wallet.add(account);
-    web3.eth.defaultAccount = account.address; // Set default account for sending transactions
-    console.log(`BlockchainService: Wallet added for address ${account.address}`);
+    const account = web3Instance.eth.accounts.privateKeyToAccount(PRIVATE_KEY);
+    web3Instance.eth.accounts.wallet.add(account);
+    web3Instance.eth.defaultAccount = account.address;
+    console.log(`BlockchainService: Development wallet added for address ${account.address}`);
   } else {
     console.warn("BlockchainService: PRIVATE_KEY is a placeholder or not set. Transactions will not be signed.");
   }
+}
+
+
+try {
+  web3 = new Web3(RPC_URL);
+
+  // Use the secure signer function to add the account to the wallet
+  getSecureSigner(web3);
+
   logProofContract = new web3.eth.Contract(contractABI, CONTRACT_ADDRESS);
-  console.log(`BlockchainService: Initialized with contract at ${CONTRACT_ADDRESS} on network ${RPC_URL}`);
+  if (contractABI.length > 0) {
+    console.log(`BlockchainService: Initialized with contract at ${CONTRACT_ADDRESS}`);
+  } else {
+    console.error("BlockchainService: Contract ABI is empty. Service may not function correctly.");
+  }
 } catch (error) {
   console.error("BlockchainService: Error initializing Web3 or contract:", error);
-  // Depending on the error, you might want to throw it or handle it gracefully
-  // For now, we log it. Functions using web3 or logProofContract will fail if not initialized.
 }
 
 
@@ -162,7 +102,7 @@ export async function anchorDataOnBlockchain(dataToHash: string): Promise<string
     // Send transaction
     const receipt = await logProofContract.methods.storeHash(hash).send({
       from: fromAddress,
-      gas: estimatedGas,
+      gas: estimatedGas.toString(),
       // gasPrice: await web3.eth.getGasPrice() // Optional: set gasPrice or let web3 handle it
     });
 

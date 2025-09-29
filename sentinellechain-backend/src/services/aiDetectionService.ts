@@ -1,49 +1,50 @@
-import { Log as LogPrismaType, Alert as AlertPrismaType } from '@prisma/client'; // Keep existing imports
-import { prisma } from '../server'; // Import shared Prisma client instance
+import { Log as LogPrismaType, Alert as AlertPrismaType } from '@prisma/client';
+import { prisma } from '../server';
 import Web3 from 'web3';
 import { getIO } from './ioService';
 import { anchorDataOnBlockchain } from './blockchainService';
 import { recordAuditEvent, AUDIT_ACTIONS } from './auditService';
+import * as fs from 'fs';
+import * as path from 'path';
 
-// Define the structure for a rule
+// Define the structure for a rule from the JSON file
+interface RuleConfig {
+  name: string;
+  pattern: string;
+  flags?: string;
+  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  confidence: number;
+  source?: string;
+  eventType?: string;
+}
+
+// Define the structure for an operational anomaly rule
 interface AnomalyRule {
   pattern: RegExp;
   severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
   confidence: number;
-  source?: string; // Optional: to match against logData.source
-  eventType?: string; // Optional: to match against logData.eventType
+  source?: string;
+  eventType?: string;
 }
 
-// Define the rules for anomaly detection
-// These rules are simple and can be extended
-const rules: AnomalyRule[] = [
-  {
-    pattern: /failed login attempts/i,
-    severity: "HIGH",
-    confidence: 0.75,
-  },
-  {
-    pattern: /port scan detected/i,
-    severity: "CRITICAL",
-    confidence: 0.90,
-  },
-  {
-    pattern: /denied/i,
-    eventType: "firewall_alert",
-    severity: "MEDIUM",
-    confidence: 0.60,
-  },
-  {
-    pattern: /SQL injection attempt/i,
-    severity: "CRITICAL",
-    confidence: 0.95,
-  },
-  {
-    pattern: /malware detected/i,
-    severity: "CRITICAL",
-    confidence: 0.98,
-  },
-];
+// Load rules from the external JSON file
+function loadRules(): AnomalyRule[] {
+  try {
+    const rulesPath = path.join(__dirname, '..', 'config', 'detection_rules.json');
+    const rulesConfig: RuleConfig[] = JSON.parse(fs.readFileSync(rulesPath, 'utf-8'));
+
+    return rulesConfig.map(rule => ({
+      ...rule,
+      pattern: new RegExp(rule.pattern, rule.flags || undefined),
+    }));
+  } catch (error) {
+    console.error("Failed to load or parse detection rules file. Using empty rule set.", error);
+    return []; // Return an empty array on error to prevent crash
+  }
+}
+
+const rules: AnomalyRule[] = loadRules();
+console.log(`Loaded ${rules.length} detection rules.`);
 
 const web3Instance = new Web3();
 
